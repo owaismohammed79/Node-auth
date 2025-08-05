@@ -1,4 +1,5 @@
 import mongoose from "mongoose"
+import bcrypt from "bcryptjs"
 
 const userSchema = new mongoose.Schema(
     {
@@ -22,6 +23,13 @@ const userSchema = new mongoose.Schema(
         timestamps: true
     }
 )
+
+userSchema.pre("save", async function(next) { //Just make sure to not use arrow functions in pre or post hooks
+    if(this.isModified("password")){ //You don't really want to run this hook everytime, hence make use of the isModified with password so that you can encypt it when it changes
+        this.password = await bcrypt.hash(this.password, 10)
+    }
+    next()
+})
 
 const User = mongoose.model("User", userSchema);
 

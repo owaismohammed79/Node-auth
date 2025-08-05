@@ -1,15 +1,15 @@
 import express, { urlencoded } from "express";
 import cors from "cors";
-import userRoutes from "./routes/user.routes.js"
 import dotenv from "dotenv";
-import db from "./utils/db.js"
-
-
 dotenv.config();
-//initialize express app
-app = express();
+import userRoutes from "./routes/user.routes.js"
+import db from "./utils/db.js"
+import cookieParser from "cookie-parser";
 
-const port = process.env.PORT || 4000
+
+//initialize express app
+const app = express();
+const port = process.env.BACKEND_PORT || 4000
 
 //app.use wali statements (initial middlewares)
 app.use(cors({
@@ -20,6 +20,7 @@ app.use(cors({
 }))
 app.use(express.json()); //This is to tell express that I'll use json data, so you need to parse it 
 app.use(urlencoded({ extended: true})); //These are to encode and decode url data and extended means to use the newer version 
+app.use(cookieParser()); //This is so that we can parse cookies in req and send them in res
 
 //db() call
 db();

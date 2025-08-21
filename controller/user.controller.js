@@ -40,7 +40,7 @@ const registerUser = async(req, res) => {
     
     //Create a token and save it in DB and send it to the user via email
     const token = crypto.randomBytes(32).toString("hex");
-    const user = await User.findOne({name, email, password})
+    const user = await User.findOne({email})
     user.verificationToken = token;
     await user.save();
     //For sending test mails (during developemnt), you can use ethereal/Mail trap. For sendind prod emails, u can use sendgrid, mailgun etc 
@@ -81,7 +81,7 @@ const registerUser = async(req, res) => {
 }
 
 const verifyUser = async(req, res) => {
-    const token = req.params;
+    const token = req.params.token;
 
     if(!token) {
         res.status(400).json({
@@ -94,9 +94,14 @@ const verifyUser = async(req, res) => {
             message: "Invalid token" //It actually is user doesn't exist, but why tell the other side that this is the problem
         })
     }
-    user.verificationToken = undefined;
+    user.verificationToken = undefined; //Setting any other value in this place would make it stay in the DB yet, while undefined
+    //deletes this key altogether from the database saving space
     user.isVerified = true;
     await user.save();
+
+    res.status(200).json({
+        message: "User verified"
+    })
 }
 
 const loginUser = async(req, res) => {
@@ -123,7 +128,7 @@ const loginUser = async(req, res) => {
         }
 
         const isMatch = await bcrypt.compare(password, user.password);
-        if(isMatch) {
+        if(!isMatch) {
             res.status(400).json({
                 message: "Invalid email or password"
             })
@@ -151,6 +156,7 @@ const loginUser = async(req, res) => {
         res.status(200).json({
             succcess: true,
             message: "User Login successfull",
+            token: token, //This is for mobile phones
             user: {
                 id: user._id,
                 name: user.name,
@@ -167,4 +173,131 @@ const loginUser = async(req, res) => {
 
 }
 
-export {registerUser, verifyUser, loginUser};
+const logoutUser = async(req, res) => {
+    try {
+        res.cookie('token', '', { expires: new Date(0) });
+        res.status(200).json({
+            success: true,
+            message: "User logged out successfully"
+        })
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "User not logged out",
+            error
+        })
+    }
+}
+
+const forgotPassword = async(req, res) => {
+    //take email from user
+    const {email} = req.body;
+    //create token
+    const token = crypto.randomBytes(32).toString("hex");
+    //mail him and save it in the db in resetPasswordToken and expiresIn
+    const user = await User.findOne({email})
+    user.resetPasswordToken = token;
+    user.resetPasswordExpires = new Date.now() + 5*60*60
+    await user.save();
+     
+    try{
+        var transporter = nodemailer.createTransport({
+        host: process.env.MAILTRAP_HOST,
+        port: process.env.MAILTRAP_PORT,
+        auth: {
+            user: process.env.MAILTRAP_TEST_USER,
+            pass: process.env.MAILTRAP_USER_PASSWORD
+        }
+        });
+
+        const mailOptions = {
+            from: '"Mohammed Owais" <maddison53@ethereal.email>',
+            to: email,
+            subject: "Reset Password",
+            text: `Please click on the following link: ${process.env.BASE_URL}/api/v1/users/reset-password/${token}`,
+            html: "<b>Click on the link to reset your password</b>",
+        }
+        
+        const info = await transporter.sendMail(mailOptions)
+        console.log("Message sent: %s", info.messageId);
+
+        res.status(201).json({
+            message: "Token sent to user",
+            success: true
+        })
+    } catch(e) {
+        res.status(400).json({
+            message: "Token not sent",
+            success: false,
+            error: `${e}`
+        })
+    }
+}
+
+const resetPassword = async(req, res) => {
+    //Take token from params
+    const {token} = req.params;
+    //Take the new password he wants to set
+    const {password, confPassword} = req.body;
+    
+    if(password !== confPassword) {
+        res.status(400).json({
+            sucess: false,
+            message: "Passwords must match"
+        })
+    }
+    //Set it in req.user and DB
+    try {
+        const user = await User.findOne({
+            resetPasswordToken: token,
+            resetPasswordExpires: {$gt: Date.now()}
+        })
+        
+        if(!user) {
+            res.status(400).json({
+                success: false,
+                message: "Token expired, please try again"
+            })
+        }
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        user.password = password;
+        user.save();
+
+        res.status(200).json({
+            success: true,
+            message: "Password changed successfully"
+        })
+    } catch (error) {
+        res.status(500).json({
+            success: false,
+            message: "Internal Server Error"
+        })
+    }
+}
+
+const getProfile = async(req, res) => {
+    try {
+        const user = await User.findById(req.user.id).select("-password");
+    
+        if(!user) {
+            return res.status(400).json({
+                success: false,
+                message: "User not found"
+            })
+        }
+    
+        res.status(200).json({
+            success: true,
+            user
+        })
+    } catch (error) {
+        console.log("Error in getting profile", error);
+        res.status(500).json({
+            success: false,
+            message: "Internal server error"
+        })
+    }
+}
+
+export {registerUser, verifyUser, loginUser, logoutUser, forgotPassword, resetPassword, getProfile};

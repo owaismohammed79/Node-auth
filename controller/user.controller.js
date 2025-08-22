@@ -197,7 +197,7 @@ const forgotPassword = async(req, res) => {
     //mail him and save it in the db in resetPasswordToken and expiresIn
     const user = await User.findOne({email})
     user.resetPasswordToken = token;
-    user.resetPasswordExpires = new Date.now() + 5*60*60
+    user.resetPasswordExpires = Date.now() + 5*60*1000
     await user.save();
      
     try{
@@ -246,7 +246,7 @@ const resetPassword = async(req, res) => {
             message: "Passwords must match"
         })
     }
-    //Set it in req.user and DB
+    //Find the user and check token expiry
     try {
         const user = await User.findOne({
             resetPasswordToken: token,
@@ -259,6 +259,7 @@ const resetPassword = async(req, res) => {
                 message: "Token expired, please try again"
             })
         }
+        //Set it in req.user and DB
         user.resetPasswordToken = undefined;
         user.resetPasswordExpires = undefined;
         user.password = password;
@@ -300,4 +301,23 @@ const getProfile = async(req, res) => {
     }
 }
 
-export {registerUser, verifyUser, loginUser, logoutUser, forgotPassword, resetPassword, getProfile};
+const googleCallback = (req, res) => {
+    //passport attaches the user to req.user after successful authentication
+    const user = req.user;
+
+    const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+        expiresIn: process.env.JWT_EXPIRE_TIME
+    });
+
+    const cookieOptions = {
+        httpOnly: true,
+        secure: true,
+        maxAge: 24 * 60 * 60 * 1000
+    };
+
+    res.cookie("token", token, cookieOptions);
+
+    res.redirect(`${process.env.FRONTEND_URL}/google-login-test.html`); //redirect to frontend application after successful login
+};
+
+export {registerUser, verifyUser, loginUser, logoutUser, forgotPassword, resetPassword, getProfile, googleCallback};

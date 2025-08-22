@@ -5,7 +5,18 @@ const userSchema = new mongoose.Schema(
     {
         name: String,
         email: String,
-        password: String,
+        password: {
+            type: String,
+            required: function() { return !this.googleId } //Password is not required if signing up with Google
+        },
+        googleId: {
+            type: String,
+            unique: true,
+            sparse: true //Allows multiple documents to have a null value for this field
+        },
+        avatar: {
+            type: String
+        },
         role: {
             type: String,
             enum: ["user", "admin"],
